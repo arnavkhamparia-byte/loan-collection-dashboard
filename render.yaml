@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: loan-collection-dashboard
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        sync: false        # Set this manually in Render dashboard (keep creds out of repo)
+      - key: DEFAULT_DAYS
+        value: 7
+      - key: REFRESH_INTERVAL_MS
+        value: 60000
+    healthCheckPath: /
+    autoDeploy: true
