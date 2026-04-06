@@ -110,26 +110,40 @@ def _build_response(bucket: int) -> dict:
     df["processed_at_date"] = df["processed_at_ist"].dt.date.apply(
                                 lambda x: x.isoformat() if pd.notna(x) else "")
 
-    dates = sorted(df["date"].unique().tolist())
+    # Build date list from eta_date (not created_date).
+    # This ensures "future" dates that have scheduled activities (activities
+    # created after 7:30 PM whose eta is the next day) appear as selectable dates.
+    created_dates = sorted(df["date"].unique().tolist())
+    min_created   = created_dates[0] if created_dates else ""
+    eta_dates_all = sorted(
+        d for d in df["eta_date"].unique().tolist()
+        if d and d >= min_created        # exclude blanks and dates before our data window
+    )
+    dates = sorted(set(created_dates) | set(eta_dates_all))
 
-    # "all" = aggregate across every date
+    # "all" = aggregate across every activity
     all_metrics = _compute_metrics(df, full_df=df, target_date=None)
 
-    # Daily summary lives in all_metrics always (regardless of selected date)
+    # Daily summary — keyed by eta_date so future scheduled days appear
     daily_summary = []
     for d in dates:
-        ddf = df[df["date"] == d]
+        ddf  = df[df["eta_date"] == d]
         ai_d = ddf[ddf["channel"] == "AI Call"]
         daily_summary.append({
-            "date": d,
+            "date":       d,
             "activities": int(len(ddf[ddf["channel"].isin(MAIN_CH)])),
             "connected":  int((ai_d["task_status"] == "Connected").sum()),
         })
     all_metrics["daily_summary"] = daily_summary
 
-    # Per-date slices — pass full_df so cross-day scheduled activities can be resolved
-    by_date = {d: _compute_metrics(df[df["date"] == d], full_df=df, target_date=d)
-               for d in dates}
+    # Per-date slices keyed by eta_date:
+    #   - Past/today dates  → show actual activities that were scheduled for that day
+    #   - Future dates      → show only scheduled (unexecuted) activities for that day
+    by_date = {
+        d: _compute_metrics(df[df["eta_date"] == d], full_df=df, target_date=d)
+        for d in dates
+        if not df[df["eta_date"] == d].empty
+    }
 
     return {"dates": dates, "all": all_metrics, "by_date": by_date}
 

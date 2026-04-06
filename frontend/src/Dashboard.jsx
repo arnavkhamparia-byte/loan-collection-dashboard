@@ -150,7 +150,7 @@ export default function Dashboard(){
 
       <div style={{...cd,marginBottom:24}}>
         <div style={{fontSize:16,fontWeight:600,marginBottom:4,display:'flex',alignItems:'center',gap:8}}>⏰ Hourly Execution — {date?dl(date):'All Dates'} (IST)</div>
-        <div style={{fontSize:11,color:T.tm,marginBottom:12}}>Scheduled (by eta) vs Executed (by processed_at) — activities created after 7:30 PM appear as scheduled for the next day</div>
+        <div style={{fontSize:11,color:T.tm,marginBottom:12}}>Scheduled (by eta) vs Executed (eta+status=done) — calls after 7:30 PM appear as scheduled for the next day</div>
         <ResponsiveContainer width="100%" height={300}><BarChart data={execHrs} margin={{left:-10,right:10}}>
           <CartesianGrid strokeDasharray="3 3" stroke={T.bd}/><XAxis dataKey="label" tick={{fill:T.tm,fontSize:10}}/><YAxis tick={{fill:T.tm,fontSize:10}}/>
           <Tooltip content={({active,payload,label})=>{if(!active||!payload?.length)return null;const d=payload[0]?.payload;const sT=(d.s_ai||0)+(d.s_wa||0)+(d.s_sms||0);const eT=(d.ai||0)+(d.wa||0)+(d.sms||0);return(<div style={{background:T.sf,border:`1px solid ${T.bd}`,borderRadius:8,padding:'10px 14px',fontSize:12}}>
@@ -410,9 +410,10 @@ export default function Dashboard(){
       <div style={{display:'flex',alignItems:'center',gap:10,background:T.sf,border:`1px solid ${T.bd}`,borderRadius:10,padding:'6px 14px'}}>
         <span style={{fontSize:14}}>📅</span>
         <label style={{fontSize:12,color:T.tm,fontWeight:500}}>Date:</label>
-        <select value={date} onChange={e=>{setDate(e.target.value);setEp(0);setEa(null);}} style={{background:'transparent',border:'none',color:T.tx,fontSize:13,fontFamily:'inherit',outline:'none',cursor:'pointer'}}>
-          {dates.slice().reverse().map(d=>(<option key={d} value={d} style={{background:T.sf}}>{dl(d)} ({d})</option>))}
-        </select>
+        <input type="date" value={date} min={minDate} max={maxDate}
+          onChange={e=>{if(e.target.value)setDate(e.target.value);setEp(0);setEa(null);}}
+          style={{background:'transparent',border:'none',color:T.tx,fontSize:14,fontFamily:'inherit',outline:'none',cursor:'pointer',colorScheme:'dark'}}/>
+        {date&&<span style={{fontSize:11,color:T.ac,fontWeight:500}}>{dl(date)}</span>}
       </div>
     </div>
     <div style={{display:'flex',gap:4,background:T.sf,borderRadius:12,padding:4,marginBottom:20,overflowX:'auto'}}>
