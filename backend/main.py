@@ -89,26 +89,31 @@ def _build_response(bucket: int) -> dict:
             t.summary,
             t.is_priority_task,
             t.ptp,
-            (t.eta      AT TIME ZONE 'Asia/Kolkata') AS eta_ist,
-            (t.modified AT TIME ZONE 'Asia/Kolkata') AS modified_ist,
-            (t.created  AT TIME ZONE 'Asia/Kolkata') AS created_ist,
-            DATE(t.created AT TIME ZONE 'Asia/Kolkata') AS date
+            (t.eta          AT TIME ZONE 'Asia/Kolkata') AS eta_ist,
+            (t.processed_at AT TIME ZONE 'Asia/Kolkata') AS processed_at_ist,
+            (t.created      AT TIME ZONE 'Asia/Kolkata') AS created_ist,
+            DATE(t.created  AT TIME ZONE 'Asia/Kolkata') AS date
         FROM activity_taskactivity t
         ORDER BY t.created ASC
     """
     with get_engine().connect() as conn:
         df = pd.read_sql(text(query), conn)
 
-    df["date"]     = df["date"].astype(str)
-    df["summary"]  = df["summary"].fillna("")
-    df["disposition"] = df["disposition"].fillna("")
-    df["task_status"] = df["task_status"].fillna("")
-    df["sentiment"]   = df["sentiment"].fillna("")
+    df["date"]            = df["date"].astype(str)
+    df["summary"]         = df["summary"].fillna("")
+    df["disposition"]     = df["disposition"].fillna("")
+    df["task_status"]     = df["task_status"].fillna("")
+    df["sentiment"]       = df["sentiment"].fillna("")
+    # Derive date strings for cross-day lookups
+    df["eta_date"]        = df["eta_ist"].dt.date.apply(
+                                lambda x: x.isoformat() if pd.notna(x) else "")
+    df["processed_at_date"] = df["processed_at_ist"].dt.date.apply(
+                                lambda x: x.isoformat() if pd.notna(x) else "")
 
     dates = sorted(df["date"].unique().tolist())
 
     # "all" = aggregate across every date
-    all_metrics = _compute_metrics(df)
+    all_metrics = _compute_metrics(df, full_df=df, target_date=None)
 
     # Daily summary lives in all_metrics always (regardless of selected date)
     daily_summary = []
@@ -122,8 +127,9 @@ def _build_response(bucket: int) -> dict:
         })
     all_metrics["daily_summary"] = daily_summary
 
-    # Per-date slices
-    by_date = {d: _compute_metrics(df[df["date"] == d]) for d in dates}
+    # Per-date slices — pass full_df so cross-day scheduled activities can be resolved
+    by_date = {d: _compute_metrics(df[df["date"] == d], full_df=df, target_date=d)
+               for d in dates}
 
     return {"dates": dates, "all": all_metrics, "by_date": by_date}
 
@@ -133,7 +139,9 @@ def get_response() -> dict:
 
 
 # ── Metrics for one dataframe slice ──────────────────────────────────────────
-def _compute_metrics(df: pd.DataFrame) -> dict:
+def _compute_metrics(df: pd.DataFrame,
+                     full_df: pd.DataFrame = None,
+                     target_date: str = None) -> dict:
     ai       = df[df["channel"] == "AI Call"].copy()
     sms      = df[df["channel"] == "SMS"]
     wa       = df[df["channel"] == "Whatsapp"]
@@ -167,7 +175,7 @@ def _compute_metrics(df: pd.DataFrame) -> dict:
     return {
         "kpis":                 kpis,
         "hourly_trend":         _hourly_trend(df),
-        "hourly_exec":          _hourly_exec(df),
+        "hourly_exec":          _hourly_exec(full_df if full_df is not None else df, target_date),
         "case_analysis":        _case_analysis(ai, accs_total),
         "disposition":          _disposition(ai),
         "category_distribution":_categories(ai),
@@ -180,7 +188,7 @@ def _compute_metrics(df: pd.DataFrame) -> dict:
     }
 
 
-# ── Hourly trend (scheduled vs executed) ─────────────────────────────────────
+# ── Hourly trend (Chart 1 — scheduled by eta_ist, executed by processed_at_ist)
 def _hourly_trend(df: pd.DataFrame) -> list:
     buckets: dict = {}
 
@@ -191,25 +199,41 @@ def _hourly_trend(df: pd.DataFrame) -> list:
 
     for k, ch in [("ai", "AI Call"), ("wa", "Whatsapp"), ("sms", "SMS")]:
         cdf = df[df["channel"] == ch]
+        # Scheduled: by eta hour
         for h, n in cdf["eta_ist"].dropna().dt.hour.value_counts().items():
             add(h, f"s_{k}", n)
+        # Executed: by processed_at hour (when the activity was actually executed)
         exec_df = cdf[(cdf["status"] == "done") & (~cdf["task_status"].isin(SKIP_STAT))]
-        for h, n in exec_df["modified_ist"].dropna().dt.hour.value_counts().items():
+        for h, n in exec_df["processed_at_ist"].dropna().dt.hour.value_counts().items():
             add(h, f"e_{k}", n)
 
     return sorted(buckets.values(), key=lambda x: x["hour"])
 
 
-# ── Hourly executed (all done activities by modified hour) ────────────────────
-def _hourly_exec(df: pd.DataFrame) -> list:
+# ── Hourly exec (Chart 2 — scheduled by eta_date, executed by processed_at_date)
+# Cross-day aware: activities created after 7:30 PM have eta on the next day,
+# so they appear as "scheduled" for that next day rather than the creation day.
+def _hourly_exec(full_df: pd.DataFrame, target_date: str = None) -> list:
     buckets: dict = {}
-    done = df[df["status"] == "done"]
 
+    def add(h, key, n):
+        if h not in buckets:
+            buckets[h] = {"hour": int(h), "s_ai": 0, "s_wa": 0, "s_sms": 0, "ai": 0, "wa": 0, "sms": 0}
+        buckets[h][key] += int(n)
+
+    # Scheduled: activities whose eta falls on target_date (cross-day aware)
+    sched = full_df[full_df["eta_date"] == target_date] if target_date else full_df
     for k, ch in [("ai", "AI Call"), ("wa", "Whatsapp"), ("sms", "SMS")]:
-        for h, n in done[done["channel"] == ch]["modified_ist"].dropna().dt.hour.value_counts().items():
-            if h not in buckets:
-                buckets[h] = {"hour": int(h), "ai": 0, "wa": 0, "sms": 0}
-            buckets[h][k] += int(n)
+        for h, n in sched[sched["channel"] == ch]["eta_ist"].dropna().dt.hour.value_counts().items():
+            add(h, f"s_{k}", n)
+
+    # Executed: activities actually processed on target_date (by processed_at)
+    done = full_df[full_df["status"] == "done"]
+    if target_date:
+        done = done[done["processed_at_date"] == target_date]
+    for k, ch in [("ai", "AI Call"), ("wa", "Whatsapp"), ("sms", "SMS")]:
+        for h, n in done[done["channel"] == ch]["processed_at_ist"].dropna().dt.hour.value_counts().items():
+            add(h, k, n)
 
     return sorted(buckets.values(), key=lambda x: x["hour"])
 

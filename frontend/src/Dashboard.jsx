@@ -91,7 +91,7 @@ export default function Dashboard(){
   const Tab1=()=>{
     const k=data.kpis;
     const hrs=useMemo(()=>{const m={};(data.hourly_trend||[]).forEach(h=>{m[h.hour]=h;});return Array.from({length:24},(_,i)=>({hour:i,label:hl(i),s_ai:m[i]?.s_ai||0,s_wa:m[i]?.s_wa||0,s_sms:m[i]?.s_sms||0,e_ai:m[i]?.e_ai||0,e_wa:m[i]?.e_wa||0,e_sms:m[i]?.e_sms||0})).filter(h=>(h.s_ai+h.s_wa+h.s_sms+h.e_ai+h.e_wa+h.e_sms)>0);},[data]);
-    const execHrs=useMemo(()=>{const m={};(data.hourly_exec||[]).forEach(h=>{m[h.hour]=h;});return Array.from({length:24},(_,i)=>({hour:i,label:hl(i),ai:m[i]?.ai||0,wa:m[i]?.wa||0,sms:m[i]?.sms||0})).filter(h=>(h.ai+h.wa+h.sms)>0);},[data]);
+    const execHrs=useMemo(()=>{const m={};(data.hourly_exec||[]).forEach(h=>{m[h.hour]=h;});return Array.from({length:24},(_,i)=>({hour:i,label:hl(i),s_ai:m[i]?.s_ai||0,s_wa:m[i]?.s_wa||0,s_sms:m[i]?.s_sms||0,ai:m[i]?.ai||0,wa:m[i]?.wa||0,sms:m[i]?.sms||0})).filter(h=>(h.s_ai+h.s_wa+h.s_sms+h.ai+h.wa+h.sms)>0);},[data]);
     const rp=k.accounts_total>0?Math.round(k.accounts_reached/k.accounts_total*100):0;
     return(<div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:16,marginBottom:24}}>
@@ -150,20 +150,27 @@ export default function Dashboard(){
 
       <div style={{...cd,marginBottom:24}}>
         <div style={{fontSize:16,fontWeight:600,marginBottom:4,display:'flex',alignItems:'center',gap:8}}>⏰ Hourly Execution — {date?dl(date):'All Dates'} (IST)</div>
-        <div style={{fontSize:11,color:T.tm,marginBottom:12}}>All executed activities (status=done, excl. rescheduled) by modified hour — stacked by channel</div>
-        <ResponsiveContainer width="100%" height={280}><BarChart data={execHrs} margin={{left:-10,right:10}}>
+        <div style={{fontSize:11,color:T.tm,marginBottom:12}}>Scheduled (by eta) vs Executed (by processed_at) — activities created after 7:30 PM appear as scheduled for the next day</div>
+        <ResponsiveContainer width="100%" height={300}><BarChart data={execHrs} margin={{left:-10,right:10}}>
           <CartesianGrid strokeDasharray="3 3" stroke={T.bd}/><XAxis dataKey="label" tick={{fill:T.tm,fontSize:10}}/><YAxis tick={{fill:T.tm,fontSize:10}}/>
-          <Tooltip content={({active,payload,label})=>{if(!active||!payload?.length)return null;const d=payload[0]?.payload;return(<div style={{background:T.sf,border:`1px solid ${T.bd}`,borderRadius:8,padding:'10px 14px',fontSize:12}}>
+          <Tooltip content={({active,payload,label})=>{if(!active||!payload?.length)return null;const d=payload[0]?.payload;const sT=(d.s_ai||0)+(d.s_wa||0)+(d.s_sms||0);const eT=(d.ai||0)+(d.wa||0)+(d.sms||0);return(<div style={{background:T.sf,border:`1px solid ${T.bd}`,borderRadius:8,padding:'10px 14px',fontSize:12}}>
             <div style={{fontWeight:600,marginBottom:6}}>{label}</div>
-            <div style={{fontWeight:600,marginBottom:4}}>Total Executed: {(d.ai||0)+(d.wa||0)+(d.sms||0)}</div>
-            {d.ai>0&&<div style={{color:'#3b82f6'}}>🤖 AI Call: {d.ai}</div>}
-            {d.wa>0&&<div style={{color:'#25D366'}}>💬 WhatsApp: {d.wa}</div>}
-            {d.sms>0&&<div style={{color:'#06b6d4'}}>📱 SMS: {d.sms}</div>}
+            {sT>0&&<><div style={{fontWeight:600,color:'#a78bfa',marginBottom:4}}>Scheduled: {sT}</div>
+            {d.s_ai>0&&<div style={{marginLeft:8,color:'#c4b5fd'}}>AI Call: {d.s_ai}</div>}
+            {d.s_wa>0&&<div style={{marginLeft:8,color:'#86efac'}}>WhatsApp: {d.s_wa}</div>}
+            {d.s_sms>0&&<div style={{marginLeft:8,color:'#93c5fd'}}>SMS: {d.s_sms}</div>}</>}
+            {eT>0&&<><div style={{fontWeight:600,color:'#2563eb',marginTop:sT>0?6:0,marginBottom:4}}>Executed: {eT}</div>
+            {d.ai>0&&<div style={{marginLeft:8,color:'#3b82f6'}}>🤖 AI Call: {d.ai}</div>}
+            {d.wa>0&&<div style={{marginLeft:8,color:'#25D366'}}>💬 WhatsApp: {d.wa}</div>}
+            {d.sms>0&&<div style={{marginLeft:8,color:'#06b6d4'}}>📱 SMS: {d.sms}</div>}</>}
           </div>);}}/>
           <Legend wrapperStyle={{fontSize:10}}/>
-          <Bar dataKey="ai" name="AI Call" stackId="exec" fill="#3b82f6"/>
-          <Bar dataKey="wa" name="WhatsApp" stackId="exec" fill="#25D366"/>
-          <Bar dataKey="sms" name="SMS" stackId="exec" fill="#06b6d4" radius={[4,4,0,0]}/>
+          <Bar dataKey="s_ai" name="Scheduled: AI Call" stackId="sched" fill="#a78bfa" opacity={0.45}/>
+          <Bar dataKey="s_wa" name="Scheduled: WhatsApp" stackId="sched" fill="#86efac" opacity={0.45}/>
+          <Bar dataKey="s_sms" name="Scheduled: SMS" stackId="sched" fill="#93c5fd" opacity={0.45} radius={[4,4,0,0]}/>
+          <Bar dataKey="ai" name="Executed: AI Call" stackId="exec" fill="#3b82f6"/>
+          <Bar dataKey="wa" name="Executed: WhatsApp" stackId="exec" fill="#25D366"/>
+          <Bar dataKey="sms" name="Executed: SMS" stackId="exec" fill="#06b6d4" radius={[4,4,0,0]}/>
         </BarChart></ResponsiveContainer>
       </div>
     </div>);
