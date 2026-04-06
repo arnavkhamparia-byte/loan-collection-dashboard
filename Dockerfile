@@ -1,15 +1,23 @@
-FROM python:3.11-slim
+# Stage 1: Build React frontend
+FROM node:20-slim AS frontend
+WORKDIR /frontend
+COPY frontend/package.json ./
+RUN npm install
+COPY frontend/ .
+RUN npm run build
 
+# Stage 2: Python FastAPI backend
+FROM python:3.11-slim
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app files
-COPY dashboard_app.py db.py transforms.py ./
+COPY backend/main.py .
+
+# Copy React build output into static/ for FastAPI to serve
+COPY --from=frontend /frontend/dist ./static
 
 EXPOSE 8050
 
-# Run with gunicorn (4 workers, timeout 120s for slow first queries)
-CMD ["gunicorn", "--workers=4", "--timeout=120", "--bind=0.0.0.0:8050", "dashboard_app:server"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8050", "--timeout-keep-alive", "120"]

@@ -6,9 +6,7 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false        # Set this manually in Render dashboard (keep creds out of repo)
-      - key: DEFAULT_DAYS
-        value: 7
-      - key: REFRESH_INTERVAL_MS
-        value: 60000
-    healthCheckPath: /
+      - key: CACHE_SECONDS
+        value: 300
+    healthCheckPath: /api/health
     autoDeploy: true
