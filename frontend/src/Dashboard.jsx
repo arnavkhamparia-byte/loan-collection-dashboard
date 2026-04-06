@@ -242,7 +242,7 @@ export default function Dashboard(){
     const cts=(data.contacts||[]).map(c=>({name:c.type.replace(/_/g,' ').replace(/\b\w/g,l=>l.toUpperCase()),volume:c.volume,connected:c.connected,rate:c.rate}));
     const accs=data.accounts||[];
     const fa=ef==='All'?accs:accs.filter(a=>a.priority===ef);
-    const ps=8,pc=Math.ceil(fa.length/ps),pa=fa.slice(ep*ps,(ep+1)*ps);
+    const ps=25,pc=Math.ceil(fa.length/ps),pa=fa.slice(ep*ps,(ep+1)*ps);
     const se={positive:'😊',neutral:'😐',negative:'😞','N/A':'—'};
     return(<div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:24}}>
@@ -299,7 +299,14 @@ export default function Dashboard(){
             <td style={{padding:'10px 6px',fontSize:11,color:T.tm,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.last_summary||'—'}</td>
           </tr>))}</tbody>
         </table></div>}
-        {pc>1&&<div style={{display:'flex',justifyContent:'center',gap:6,marginTop:12}}>{Array.from({length:pc},(_,i)=>(<button key={i} onClick={()=>setEp(i)} style={{width:28,height:28,borderRadius:6,border:`1px solid ${ep===i?T.ac:T.bd}`,background:ep===i?T.ac+'22':'transparent',color:T.tx,cursor:'pointer',fontSize:11}}>{i+1}</button>))}</div>}
+        {pc>1&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:14,flexWrap:'wrap',gap:8}}>
+          <span style={{fontSize:11,color:T.td}}>Showing {ep*ps+1}–{Math.min((ep+1)*ps,fa.length)} of {fa.length} accounts</span>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <button onClick={()=>setEp(e=>Math.max(0,e-1))} disabled={ep===0} style={{padding:'5px 14px',borderRadius:7,border:`1px solid ${T.bd}`,background:'transparent',color:ep===0?T.td:T.tx,cursor:ep===0?'not-allowed':'pointer',fontSize:12,fontFamily:'inherit'}}>‹ Prev</button>
+            <span style={{fontSize:12,color:T.tm,minWidth:90,textAlign:'center'}}>Page <span style={{fontWeight:600,color:T.tx}}>{ep+1}</span> of <span style={{fontWeight:600,color:T.tx}}>{pc}</span></span>
+            <button onClick={()=>setEp(e=>Math.min(pc-1,e+1))} disabled={ep===pc-1} style={{padding:'5px 14px',borderRadius:7,border:`1px solid ${T.bd}`,background:'transparent',color:ep===pc-1?T.td:T.tx,cursor:ep===pc-1?'not-allowed':'pointer',fontSize:12,fontFamily:'inherit'}}>Next ›</button>
+          </div>
+        </div>}
       </div>
     </div>);
   };
