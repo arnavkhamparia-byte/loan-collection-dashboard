@@ -92,8 +92,10 @@ def _build_response(bucket: int) -> dict:
             (t.eta          AT TIME ZONE 'Asia/Kolkata') AS eta_ist,
             (t.processed_at AT TIME ZONE 'Asia/Kolkata') AS processed_at_ist,
             (t.created      AT TIME ZONE 'Asia/Kolkata') AS created_ist,
-            DATE(t.created  AT TIME ZONE 'Asia/Kolkata') AS date
+            DATE(t.created  AT TIME ZONE 'Asia/Kolkata') AS date,
+            ad.payment_status
         FROM activity_taskactivity t
+        LEFT JOIN account_details ad ON ad.id = t.account_id
         ORDER BY t.created ASC
     """
     with get_engine().connect() as conn:
@@ -104,6 +106,7 @@ def _build_response(bucket: int) -> dict:
     df["disposition"]     = df["disposition"].fillna("")
     df["task_status"]     = df["task_status"].fillna("")
     df["sentiment"]       = df["sentiment"].fillna("")
+    df["payment_status"]  = df["payment_status"].fillna("Unknown")
     # Derive date strings for cross-day lookups
     df["eta_date"]        = df["eta_ist"].dt.date.apply(
                                 lambda x: x.isoformat() if pd.notna(x) else "")
@@ -397,11 +400,18 @@ def _accounts(df: pd.DataFrame, ai: pd.DataFrame) -> list:
 
 
 # ── PTP funnel ────────────────────────────────────────────────────────────────
+# Counts unique ACCOUNTS at each stage (not activity rows).
+# "Paid" comes from account_details.payment_status (joined in main query),
+# not from disposition — disposition "Payment Paid" means the customer *claimed*
+# they paid during a call, which is unreliable. payment_status is the source of truth.
 def _ptp_funnel(df: pd.DataFrame) -> dict:
+    ps = df.drop_duplicates("account_id").set_index("account_id")["payment_status"]
     return {
-        "commitments": int(df["ptp"].notna().sum()),
-        "agreed":      int((df["disposition"] == "Agree To Pay").sum()),
-        "paid":        int(df["disposition"].isin(["Payment Paid", "Paid"]).sum()),
+        "commitments":     int(df[df["ptp"].notna()]["account_id"].nunique()),
+        "agreed":          int(df[df["disposition"] == "Agree To Pay"]["account_id"].nunique()),
+        "paid_normalised": int((ps == "Paid-Normalised").sum()),
+        "paid_partial":    int((ps == "Paid-Partial").sum()),
+        "unpaid":          int((ps == "Unpaid").sum()),
     }
 
 

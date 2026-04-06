@@ -307,7 +307,14 @@ export default function Dashboard(){
   // TAB 4: ANALYTICS
   const Tab4=()=>{
     const ptp=data.ptp_funnel||{};
-    const ptpD=[{name:'Commitments',value:ptp.commitments||0,fill:T.ac},{name:'Agreed to Pay',value:ptp.agreed||0,fill:T.ok},{name:'Paid',value:ptp.paid||0,fill:'#10b981'}];
+    const totalAccs=((ptp.unpaid||0)+(ptp.paid_normalised||0)+(ptp.paid_partial||0))||1;
+    const ptpD=[
+      {name:'PTP Commitments (ptp recorded)',value:ptp.commitments||0,fill:T.ac,note:'Unique accounts with a PTP date logged'},
+      {name:'Agreed to Pay',value:ptp.agreed||0,fill:'#818cf8',note:'Said "Agree To Pay" during call'},
+      {name:'Paid — Normalised',value:ptp.paid_normalised||0,fill:T.ok,note:'Fully paid per account_details'},
+      {name:'Paid — Partial',value:ptp.paid_partial||0,fill:'#34d399',note:'Partial payment per account_details'},
+      {name:'Unpaid',value:ptp.unpaid||0,fill:T.dg,note:'No payment recorded yet'},
+    ];
     const provs=data.providers||[];
     const chDiv=data.channel_diversity||{};
     const chDivD=Object.entries(chDiv).filter(([k])=>k!=='0').map(([c,n])=>({name:`${c} Channel${parseInt(c)>1?'s':''}`,value:n})).sort((a,b)=>a.name.localeCompare(b.name));
@@ -326,8 +333,9 @@ export default function Dashboard(){
     return(<div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:24}}>
         <div style={cd}>
-          <div style={{fontSize:16,fontWeight:600,marginBottom:12,display:'flex',alignItems:'center',gap:8}}>🔄 PTP Funnel</div>
-          <div style={{display:'flex',flexDirection:'column',gap:8,padding:'12px 0'}}>{ptpD.map((d,i)=>{const mx=Math.max(...ptpD.map(p=>p.value),1);const w=Math.max(d.value/mx*100,8);return(<div key={i}><div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4}}><span style={{color:T.tm}}>{d.name}</span><span style={{fontWeight:700,fontFamily:'monospace'}}>{d.value}</span></div><div style={{height:24,background:T.sa,borderRadius:6,overflow:'hidden'}}><div style={{width:`${w}%`,height:'100%',background:d.fill,borderRadius:6,opacity:0.8}}/></div></div>);})}</div>
+          <div style={{fontSize:16,fontWeight:600,marginBottom:4,display:'flex',alignItems:'center',gap:8}}>🔄 PTP Funnel</div>
+          <div style={{fontSize:11,color:T.tm,marginBottom:12}}>Unique accounts · "Paid" sourced from account_details.payment_status</div>
+          <div style={{display:'flex',flexDirection:'column',gap:10,padding:'4px 0'}}>{ptpD.map((d,i)=>{const mx=Math.max(...ptpD.map(p=>p.value),1);const w=Math.max(d.value/mx*100,8);const pct=(d.value/totalAccs*100).toFixed(1);return(<div key={i}><div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4,gap:8}}><span style={{color:T.tm,flex:1}}>{d.name}</span><span style={{fontSize:10,color:d.fill,fontWeight:500}}>{pct}%</span><span style={{fontWeight:700,fontFamily:'monospace',color:d.fill}}>{fmt(d.value)}</span></div><div style={{height:20,background:T.sa,borderRadius:6,overflow:'hidden'}}><div style={{width:`${w}%`,height:'100%',background:d.fill,borderRadius:6,opacity:0.85}}/></div></div>);})}</div>
         </div>
         <div style={cd}>
           <div style={{fontSize:16,fontWeight:600,marginBottom:12,display:'flex',alignItems:'center',gap:8}}>🏢 Provider Performance</div>
@@ -404,7 +412,7 @@ export default function Dashboard(){
   return(<div style={cs}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'20px 0 12px',flexWrap:'wrap',gap:12}}>
       <div>
-        <div style={{fontSize:22,fontWeight:700,letterSpacing:'-0.5px',background:'linear-gradient(135deg,#6366f1,#a855f7)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Loan Collection Dashboard</div>
+        <div style={{fontSize:22,fontWeight:700,letterSpacing:'-0.5px',background:'linear-gradient(135deg,#6366f1,#a855f7)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Collection Data Insights</div>
         {lastRefresh&&<div style={{fontSize:10,color:T.td,marginTop:2}}>Live · Last refreshed {lastRefresh} · Auto-refresh every 60s{error?` · ⚠️ ${error}`:''}</div>}
       </div>
       <div style={{display:'flex',alignItems:'center',gap:10,background:T.sf,border:`1px solid ${T.bd}`,borderRadius:10,padding:'6px 14px'}}>
