@@ -188,7 +188,10 @@ def _compute_metrics(df: pd.DataFrame,
     }
 
 
-# ── Hourly trend (Chart 1 — scheduled by eta_ist, executed by processed_at_ist)
+# ── Hourly trend (Chart 1 — scheduled by eta_ist, executed by eta_ist+status=done)
+# NOTE: processed_at is set by a batch finalization job hours after the call fires,
+# so it does NOT represent when the call happened. eta_ist is the correct execution
+# timestamp — it reflects when the system actually placed the call.
 def _hourly_trend(df: pd.DataFrame) -> list:
     buckets: dict = {}
 
@@ -199,20 +202,22 @@ def _hourly_trend(df: pd.DataFrame) -> list:
 
     for k, ch in [("ai", "AI Call"), ("wa", "Whatsapp"), ("sms", "SMS")]:
         cdf = df[df["channel"] == ch]
-        # Scheduled: by eta hour
+        # Scheduled: all activities by eta hour
         for h, n in cdf["eta_ist"].dropna().dt.hour.value_counts().items():
             add(h, f"s_{k}", n)
-        # Executed: by processed_at hour (when the activity was actually executed)
+        # Executed: status=done by eta hour (eta = when the call was actually placed)
         exec_df = cdf[(cdf["status"] == "done") & (~cdf["task_status"].isin(SKIP_STAT))]
-        for h, n in exec_df["processed_at_ist"].dropna().dt.hour.value_counts().items():
+        for h, n in exec_df["eta_ist"].dropna().dt.hour.value_counts().items():
             add(h, f"e_{k}", n)
 
     return sorted(buckets.values(), key=lambda x: x["hour"])
 
 
-# ── Hourly exec (Chart 2 — scheduled by eta_date, executed by processed_at_date)
-# Cross-day aware: activities created after 7:30 PM have eta on the next day,
-# so they appear as "scheduled" for that next day rather than the creation day.
+# ── Hourly exec (Chart 2 — cross-day aware, both scheduled and executed use eta_date)
+# Scheduled: activities whose eta_date == view_date (includes next-day carry-overs)
+# Executed : status=done whose eta_date == view_date (eta = actual call time)
+# Activities created after 7:30 PM have eta on the next day → appear as scheduled
+# for that next day, never leak into the current day's executed bars.
 def _hourly_exec(full_df: pd.DataFrame, target_date: str = None) -> list:
     buckets: dict = {}
 
@@ -227,12 +232,12 @@ def _hourly_exec(full_df: pd.DataFrame, target_date: str = None) -> list:
         for h, n in sched[sched["channel"] == ch]["eta_ist"].dropna().dt.hour.value_counts().items():
             add(h, f"s_{k}", n)
 
-    # Executed: activities actually processed on target_date (by processed_at)
+    # Executed: status=done whose eta falls on target_date (eta = when call was placed)
     done = full_df[full_df["status"] == "done"]
     if target_date:
-        done = done[done["processed_at_date"] == target_date]
+        done = done[done["eta_date"] == target_date]
     for k, ch in [("ai", "AI Call"), ("wa", "Whatsapp"), ("sms", "SMS")]:
-        for h, n in done[done["channel"] == ch]["processed_at_ist"].dropna().dt.hour.value_counts().items():
+        for h, n in done[done["channel"] == ch]["eta_ist"].dropna().dt.hour.value_counts().items():
             add(h, k, n)
 
     return sorted(buckets.values(), key=lambda x: x["hour"])
