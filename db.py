@@ -75,9 +75,9 @@ def _fetch_activities_cached(days: int, bucket: int) -> pd.DataFrame:
 def get_activities_df(days: int = 7) -> pd.DataFrame:
     """
     Public API: returns activities DataFrame for the last `days` days.
-    Cached for 60 seconds — multiple callbacks within the same minute share one DB hit.
+    Cached for 5 minutes — multiple callbacks within the same window share one DB hit.
     """
-    return _fetch_activities_cached(days, _time_bucket(60))
+    return _fetch_activities_cached(days, _time_bucket(300))
 
 
 def get_db_status() -> dict:

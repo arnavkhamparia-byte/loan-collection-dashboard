@@ -3,7 +3,7 @@
 Loan Collection Dashboard - Live DB Edition
 ============================================
 Reads from finguard_oto_april PostgreSQL database in real-time.
-Auto-refreshes every 60 seconds.
+Auto-refreshes every 5 minutes.
 
 Usage:
     python dashboard_app.py [--port PORT] [--debug] [--days DAYS]
@@ -30,7 +30,7 @@ from transforms import compute_metrics
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 DEFAULT_DAYS = int(os.environ.get("DEFAULT_DAYS", 7))
-REFRESH_INTERVAL_MS = int(os.environ.get("REFRESH_INTERVAL_MS", 60_000))  # 60 seconds
+REFRESH_INTERVAL_MS = int(os.environ.get("REFRESH_INTERVAL_MS", 300_000))  # 5 minutes
 
 CATEGORY_COLORS = {
     "Financial Hardship": "#FF4444",
